@@ -720,7 +720,7 @@
 
     <section class="input-section">
         <div class="input-row">
-            <textarea class="input-textarea" id="noteInput" placeholder="📋 粘贴发货信息 (支持自动去重标签，一行平台、订单、买家、快递)" rows="1"></textarea>
+            <textarea class="input-textarea" id="noteInput" placeholder="📋 粘贴发货信息" rows="1"></textarea>
             <button class="btn-add" id="btnAdd">＋ 添加发货</button>
         </div>
     </section>
@@ -767,13 +767,12 @@
         const resetWallpaperBtn = document.getElementById('resetWallpaperBtn');
         const beijingClockDiv = document.getElementById('beijingClock');
 
-        const STORAGE_KEY = 'sticky_notes_edit_v4';
+        const STORAGE_KEY = 'sticky_notes_edit_v5';
         const WALLPAPER_KEY = 'custom_wallpaper_data';
         let notes = [];
         let toastTimer = null;
         let activeFilters = { dateFrom: '', dateTo: '', buyer: '', order: '', platform: '' };
         
-        // 撤销栈: 存储删除操作记录 { type: 'single', note, index } 或 { type: 'bulk', notesSnapshot }
         let undoStack = [];
 
         // ========= 实时大时钟 =========
@@ -830,42 +829,42 @@
         resetWallpaperBtn.addEventListener('click', () => { resetWallpaper(); showToast('背景已重置', true); });
         loadStoredWallpaper();
 
-        // ========= 智能解析（彻底解决重复标签）=========
+        // ========= 核心：干净去除前缀 =========
         function cleanLabelValue(rawLine) {
-            // 去除常见前缀 平台: 订单号: 订单: 买家: 快递: 物流: 等 (中英文冒号)
-            let cleaned = rawLine.replace(/^(平台|订单号|订单|买家|快递|物流)\s*[:：]\s*/i, '').trim();
-            // 如果依然残留 "平台:" 之类的递归清理一次
+            let cleaned = rawLine.replace(/^(平台|订单号|订单|买家|快递|物流|收件人|收货人)\s*[:：]\s*/i, '').trim();
             if (cleaned.match(/^(平台|订单|买家|快递)/i)) cleaned = cleaned.replace(/^(平台|订单|买家|快递)\s*[:：]\s*/i, '').trim();
             return cleaned || rawLine.trim();
         }
 
+        /**
+         * 智能解析：平台 = 第1行，订单 = 第2行，买家 = 倒数第2行，快递 = 最后一行
+         */
         function parseShippingInfo(text) {
             const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
             if (lines.length < 4) return null;
-            // 取前四行作为平台、订单、买家、快递的原始行，但买家可能是倒数第二行（某些情况），但大多数用索引0/1/2/3
-            let platformRaw = lines[0];
-            let orderRaw = lines[1];
-            let buyerRaw = lines[2];
-            let expressRaw = lines[3];
-            // 如果第三行明显包含“买家:”则更好，否则尝试检测后面是否有买家关键词，但保持简单可靠。
+            
+            const platformRaw = lines[0];
+            const orderRaw = lines[1];
+            const buyerRaw = lines[lines.length - 2];
+            const expressRaw = lines[lines.length - 1];
+            
             const platform = cleanLabelValue(platformRaw);
             const order = cleanLabelValue(orderRaw);
             const buyer = cleanLabelValue(buyerRaw);
             const express = cleanLabelValue(expressRaw);
+            
             if (!platform && !order && !buyer && !express) return null;
-            return `平台: ${platform}\n订单: ${order}\n买家: ${buyer}\n快递: ${express}`;
+            return `平台: ${platform || '未知'}\n订单: ${order || '未知'}\n买家: ${buyer || '未知'}\n快递: ${express || '未知'}`;
         }
 
-        // 修复旧数据: 去除内容中的重复标签 (如 “平台: 平台: 淘宝” → “平台: 淘宝”)
+        // 修复旧数据中可能残留的重复标签 (提高兼容)
         function repairLegacyContent(content, isAuto) {
             if (!isAuto) return content;
-            // 提取各字段最后出现的真实值
             const extractLastValue = (fieldName) => {
                 const regex = new RegExp(`${fieldName}\\s*[:：]\\s*(.+?)(?=\\n|$)`, 'gi');
                 let matches = [...content.matchAll(regex)];
                 if (matches.length === 0) return '';
                 let last = matches[matches.length-1][1].trim();
-                // 如果还包含同样的标签，递归清理
                 if (last.match(new RegExp(`^${fieldName}\\s*[:：]`, 'i'))) {
                     last = last.replace(new RegExp(`^${fieldName}\\s*[:：]\\s*`, 'i'), '').trim();
                 }
@@ -905,18 +904,16 @@
                 notes = notes.filter(n => n && n.id);
             } catch (e) { notes = []; }
             if (notes.length === 0) {
-                const demo1 = `淘宝\n订单号：TB20241103001\n买家：陈欣然\n圆通快递 YT567891234`;
-                const demo2 = `拼多多\n订单号：PDD241105099\n买家：周晓雅\n中通快递 731245678901`;
-                const demo3 = `京东\n订单号：JD20241108009\n买家：刘一晨\n顺丰速运 SF1029334455`;
-                const formatDemo = (txt) => { const formatted = parseShippingInfo(txt); return formatted || txt; };
+                const demoRaw = `铸德淘宝\n5117791500591004614\n定制专用*1\n3.0KW电机变频箱*1 用单相220V输入单相220V输出V3-7.5KW改 489，交期5.28【小陈｜05-27 13:28:35】\n邓生\n73710761995550`;
                 const nowDate = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Asia/Shanghai' });
-                notes = [demo1, demo2, demo3].map((txt, idx) => ({
-                    id: Date.now() + idx,
-                    content: formatDemo(txt),
+                const formatted = parseShippingInfo(demoRaw);
+                notes = [{
+                    id: Date.now(),
+                    content: formatted || demoRaw,
                     date: nowDate,
-                    createdAt: Date.now() + idx * 1000,
-                    isAutoFormatted: true,
-                }));
+                    createdAt: Date.now(),
+                    isAutoFormatted: !!formatted,
+                }];
                 saveNotes();
             }
             notes.sort((a, b) => (b.createdAt || b.id) - (a.createdAt || a.id));
@@ -977,19 +974,16 @@
             if (undoStack.length > 20) undoStack.shift();
         }
 
-        // 带密码删除
         function requestDeleteWithPassword(noteId, cardElement) {
             const pwd = prompt('🔐 删除需要验证密码', '');
             if (pwd !== '00000') {
                 showToast('❌ 密码错误，无法删除', false);
                 return false;
             }
-            // 备份
             const idx = notes.findIndex(n => n.id === noteId);
             if (idx === -1) return false;
             const deletedNote = { ...notes[idx] };
             const deletedIndex = idx;
-            // 动画删除
             if (cardElement) {
                 cardElement.style.opacity = '0';
                 cardElement.style.transform = 'translateX(20px)';
@@ -1012,7 +1006,6 @@
             return true;
         }
 
-        // 清空全部带密码
         function clearAllWithPassword() {
             const pwd = prompt('⚠️ 清空所有发货记录需要验证密码', '');
             if (pwd !== '00000') {
@@ -1026,7 +1019,6 @@
             showToast('🗑️ 已清空所有记录 (可撤销)', true);
         }
 
-        // 撤销逻辑
         function undoLastDelete() {
             if (undoStack.length === 0) {
                 showToast('暂无可以撤销的删除操作', false);
@@ -1036,7 +1028,7 @@
             restoreFromUndo(last);
         }
 
-        // 筛选、搜索、渲染等 (原样保留)
+        // 筛选与渲染
         function extractField(note, field) {
             if (!note.isAutoFormatted) return '';
             const lines = note.content.split('\n');
@@ -1124,7 +1116,7 @@
         searchInput.addEventListener('input', () => { searchClear.classList.toggle('visible', searchInput.value.length > 0); renderNotes(); });
         searchClear.onclick = () => { searchInput.value = ''; searchClear.classList.remove('visible'); renderNotes(); };
         btnClearAll.onclick = () => clearAllWithPassword();
-        document.addEventListener('paste', (e) => { if (document.activeElement === noteInput || document.activeElement === searchInput) return; const text = e.clipboardData?.getData('text/plain'); if (text?.trim()) { e.preventDefault(); if (addNote(text.trim())) { searchInput.value = ''; renderNotes(); showToast('📦 智能识别并添加', true); } } });
+        document.addEventListener('paste', (e) => { if (document.activeElement === noteInput || document.activeElement === searchInput) return; const text = e.clipboardData?.getData('text/plain'); if (text?.trim()) { e.preventDefault(); if (addNote(text.trim())) { searchInput.value = ''; renderNotes(); showToast('📦 智能提取并添加 (平台/订单/买家/快递)', true); } } });
         btnToggleFilter.onclick = () => { filterPanel.classList.toggle('show'); btnToggleFilter.classList.toggle('active', filterPanel.classList.contains('show')); };
         btnApplyFilter.onclick = () => { activeFilters = { dateFrom: filterDateFrom.value, dateTo: filterDateTo.value, buyer: filterBuyer.value.trim(), order: filterOrder.value.trim(), platform: filterPlatform.value.trim() }; renderNotes(); };
         btnClearFilter.onclick = () => { filterDateFrom.value = ''; filterDateTo.value = ''; filterBuyer.value = ''; filterOrder.value = ''; filterPlatform.value = ''; activeFilters = { dateFrom: '', dateTo: '', buyer: '', order: '', platform: '' }; renderNotes(); };
