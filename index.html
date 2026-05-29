@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="description" content="透明玻璃风格 · 智能发货记录 - 粘贴识别订单，自定义壁纸，实时时钟">
-    <title>📦 发货记录</title>
+    <meta name="description" content="透明玻璃风格 · 智能发货记录 - 粘贴识别订单，自定义壁纸，实时时钟，密码删除，撤回保护">
+    <title>📦 幻彩发货记录 · 通透玻璃 · 安全撤销</title>
     <style>
         /* ----- 全局重置：极致透明 & 毛玻璃全覆盖 ----- */
         * {
@@ -78,13 +78,11 @@
             transition: background-image 0.25s ease;
         }
 
-        /* 壁纸激活时，body背景被替换，但确保底层透明感 */
         body.wallpaper-active {
             background-size: cover;
             background-position: center;
         }
 
-        /* 主容器：全屏毛玻璃全覆盖、超大圆角、沉浸感 */
         .app-container {
             width: 100%;
             max-width: 960px;
@@ -102,7 +100,6 @@
             transition: background 0.2s;
         }
 
-        /* 头部区域透明星空感 */
         .app-header {
             padding: 22px 28px 14px;
             border-bottom: 1px solid var(--border-color-glass);
@@ -144,7 +141,6 @@
             backdrop-filter: blur(4px);
         }
 
-        /* 右侧工具区：时钟更大更醒目 */
         .header-tools {
             display: flex;
             align-items: center;
@@ -158,7 +154,7 @@
 
         .real-time-clock {
             font-family: 'SF Mono', 'JetBrains Mono', monospace;
-            font-size: 1.35rem;      /* 时钟调大 */
+            font-size: 1.35rem;
             font-weight: 600;
             background: rgba(0, 0, 0, 0.25);
             padding: 6px 18px;
@@ -393,6 +389,7 @@
         .toolbar {
             display: flex;
             justify-content: space-between;
+            align-items: center;
             padding: 10px 28px;
             border-bottom: 1px solid var(--border-color-glass);
             background: transparent;
@@ -406,18 +403,36 @@
             color: #e2e8f0;
         }
 
-        #btnClearAll {
+        .toolbar-actions {
+            display: flex;
+            gap: 12px;
+        }
+
+        .toolbar-btn {
             background: rgba(0, 0, 0, 0.3);
-            border: none;
+            border: 1px solid rgba(255, 255, 255, 0.2);
             padding: 5px 18px;
             font-size: 0.8rem;
-            color: #ffb7b7;
             border-radius: 32px;
             cursor: pointer;
             transition: 0.15s;
+            color: #e2e8f0;
+            font-weight: 500;
+            backdrop-filter: blur(4px);
         }
 
-        #btnClearAll:hover {
+        .toolbar-btn.undo-btn {
+            background: rgba(96, 140, 255, 0.4);
+            border-color: rgba(255,255,255,0.4);
+        }
+        .toolbar-btn.undo-btn:hover {
+            background: var(--accent);
+            color: white;
+        }
+        .toolbar-btn.clear-all-btn {
+            color: #ffb7b7;
+        }
+        .toolbar-btn.clear-all-btn:hover {
             background: rgba(220, 60, 60, 0.5);
             color: white;
         }
@@ -445,7 +460,6 @@
             border-radius: 10px;
         }
 
-        /* 玻璃卡片：通透圆润 */
         .note-card {
             background: var(--card-glass);
             backdrop-filter: blur(16px);
@@ -509,12 +523,11 @@
             font-size: 0.85rem;
         }
 
-        /* 日期更大更圆润 */
         .note-date-tag {
             display: inline-flex;
             align-items: center;
             gap: 8px;
-            font-size: 0.92rem;      /* 显著增大 */
+            font-size: 0.92rem;
             font-weight: 530;
             color: #f0fcff;
             background: rgba(0, 0, 0, 0.3);
@@ -611,8 +624,7 @@
             border: none;
         }
 
-        .empty-state,
-        .no-results {
+        .empty-state, .no-results {
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -708,14 +720,17 @@
 
     <section class="input-section">
         <div class="input-row">
-            <textarea class="input-textarea" id="noteInput" placeholder="📋 粘贴发货信息" rows="1"></textarea>
+            <textarea class="input-textarea" id="noteInput" placeholder="📋 粘贴发货信息 (支持自动去重标签，一行平台、订单、买家、快递)" rows="1"></textarea>
             <button class="btn-add" id="btnAdd">＋ 添加发货</button>
         </div>
     </section>
 
     <div class="toolbar">
         <span class="toolbar-info">显示 <strong id="filteredCount">0</strong> 条</span>
-        <button id="btnClearAll">🗑️ 清空全部</button>
+        <div class="toolbar-actions">
+            <button class="toolbar-btn undo-btn" id="undoDeleteBtn">↩️ 撤销删除</button>
+            <button class="toolbar-btn clear-all-btn" id="btnClearAll">🗑️ 清空全部</button>
+        </div>
     </div>
 
     <div class="notes-list" id="notesList"></div>
@@ -734,6 +749,7 @@
         const totalCountSpan = document.getElementById('totalCount');
         const filteredCountSpan = document.getElementById('filteredCount');
         const toastEl = document.getElementById('toast');
+        const undoDeleteBtn = document.getElementById('undoDeleteBtn');
 
         const btnToggleFilter = document.getElementById('btnToggleFilter');
         const filterPanel = document.getElementById('filterPanel');
@@ -751,11 +767,14 @@
         const resetWallpaperBtn = document.getElementById('resetWallpaperBtn');
         const beijingClockDiv = document.getElementById('beijingClock');
 
-        const STORAGE_KEY = 'sticky_notes_edit_v3';
+        const STORAGE_KEY = 'sticky_notes_edit_v4';
         const WALLPAPER_KEY = 'custom_wallpaper_data';
         let notes = [];
         let toastTimer = null;
         let activeFilters = { dateFrom: '', dateTo: '', buyer: '', order: '', platform: '' };
+        
+        // 撤销栈: 存储删除操作记录 { type: 'single', note, index } 或 { type: 'bulk', notesSnapshot }
+        let undoStack = [];
 
         // ========= 实时大时钟 =========
         function updateBeijingClock() {
@@ -773,24 +792,20 @@
         setInterval(updateBeijingClock, 1000);
         updateBeijingClock();
 
-        // ========= 壁纸管理（透明全屏覆盖）=========
+        // ========= 壁纸管理 =========
         function setWallpaperFromDataURL(dataURL) {
             if (!dataURL) return;
             document.body.style.backgroundImage = `url(${dataURL})`;
             document.body.style.backgroundSize = 'cover';
             document.body.style.backgroundPosition = 'center';
             document.body.classList.add('wallpaper-active');
-            try {
-                localStorage.setItem(WALLPAPER_KEY, dataURL);
-            } catch (e) { }
+            try { localStorage.setItem(WALLPAPER_KEY, dataURL); } catch (e) { }
         }
         function resetWallpaper() {
             document.body.style.backgroundImage = '';
             document.body.classList.remove('wallpaper-active');
             localStorage.removeItem(WALLPAPER_KEY);
-            // 恢复默认径向渐变背景，但依然透明感
             document.body.style.backgroundImage = 'radial-gradient(circle at 20% 30%, rgba(0,0,0,0.2), rgba(0,0,0,0.4))';
-            document.body.style.backgroundColor = '';
         }
         function handleUpload() {
             const input = document.createElement('input');
@@ -815,7 +830,73 @@
         resetWallpaperBtn.addEventListener('click', () => { resetWallpaper(); showToast('背景已重置', true); });
         loadStoredWallpaper();
 
-        // ========= 笔记逻辑 =========
+        // ========= 智能解析（彻底解决重复标签）=========
+        function cleanLabelValue(rawLine) {
+            // 去除常见前缀 平台: 订单号: 订单: 买家: 快递: 物流: 等 (中英文冒号)
+            let cleaned = rawLine.replace(/^(平台|订单号|订单|买家|快递|物流)\s*[:：]\s*/i, '').trim();
+            // 如果依然残留 "平台:" 之类的递归清理一次
+            if (cleaned.match(/^(平台|订单|买家|快递)/i)) cleaned = cleaned.replace(/^(平台|订单|买家|快递)\s*[:：]\s*/i, '').trim();
+            return cleaned || rawLine.trim();
+        }
+
+        function parseShippingInfo(text) {
+            const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+            if (lines.length < 4) return null;
+            // 取前四行作为平台、订单、买家、快递的原始行，但买家可能是倒数第二行（某些情况），但大多数用索引0/1/2/3
+            let platformRaw = lines[0];
+            let orderRaw = lines[1];
+            let buyerRaw = lines[2];
+            let expressRaw = lines[3];
+            // 如果第三行明显包含“买家:”则更好，否则尝试检测后面是否有买家关键词，但保持简单可靠。
+            const platform = cleanLabelValue(platformRaw);
+            const order = cleanLabelValue(orderRaw);
+            const buyer = cleanLabelValue(buyerRaw);
+            const express = cleanLabelValue(expressRaw);
+            if (!platform && !order && !buyer && !express) return null;
+            return `平台: ${platform}\n订单: ${order}\n买家: ${buyer}\n快递: ${express}`;
+        }
+
+        // 修复旧数据: 去除内容中的重复标签 (如 “平台: 平台: 淘宝” → “平台: 淘宝”)
+        function repairLegacyContent(content, isAuto) {
+            if (!isAuto) return content;
+            // 提取各字段最后出现的真实值
+            const extractLastValue = (fieldName) => {
+                const regex = new RegExp(`${fieldName}\\s*[:：]\\s*(.+?)(?=\\n|$)`, 'gi');
+                let matches = [...content.matchAll(regex)];
+                if (matches.length === 0) return '';
+                let last = matches[matches.length-1][1].trim();
+                // 如果还包含同样的标签，递归清理
+                if (last.match(new RegExp(`^${fieldName}\\s*[:：]`, 'i'))) {
+                    last = last.replace(new RegExp(`^${fieldName}\\s*[:：]\\s*`, 'i'), '').trim();
+                }
+                return last;
+            };
+            const platform = extractLastValue('平台');
+            const order = extractLastValue('订单');
+            const buyer = extractLastValue('买家');
+            const express = extractLastValue('快递');
+            if (platform || order || buyer || express) {
+                return `平台: ${platform || '未知'}\n订单: ${order || '未知'}\n买家: ${buyer || '未知'}\n快递: ${express || '未知'}`;
+            }
+            return content;
+        }
+
+        function migrateNotes() {
+            let changed = false;
+            notes = notes.map(note => {
+                if (note.isAutoFormatted) {
+                    const repaired = repairLegacyContent(note.content, true);
+                    if (repaired !== note.content) {
+                        changed = true;
+                        return { ...note, content: repaired };
+                    }
+                }
+                return note;
+            });
+            if (changed) saveNotes();
+        }
+
+        // ========= 数据操作 =========
         function loadNotes() {
             try {
                 const raw = localStorage.getItem(STORAGE_KEY);
@@ -827,11 +908,7 @@
                 const demo1 = `淘宝\n订单号：TB20241103001\n买家：陈欣然\n圆通快递 YT567891234`;
                 const demo2 = `拼多多\n订单号：PDD241105099\n买家：周晓雅\n中通快递 731245678901`;
                 const demo3 = `京东\n订单号：JD20241108009\n买家：刘一晨\n顺丰速运 SF1029334455`;
-                const formatDemo = (txt) => {
-                    const lines = txt.split(/\r?\n/).map(l => l.trim()).filter(l => l);
-                    if (lines.length >= 4) return `平台: ${lines[0]}\n订单: ${lines[1]}\n买家: ${lines[2]}\n快递: ${lines[3]}`;
-                    return txt;
-                };
+                const formatDemo = (txt) => { const formatted = parseShippingInfo(txt); return formatted || txt; };
                 const nowDate = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Asia/Shanghai' });
                 notes = [demo1, demo2, demo3].map((txt, idx) => ({
                     id: Date.now() + idx,
@@ -843,20 +920,10 @@
                 saveNotes();
             }
             notes.sort((a, b) => (b.createdAt || b.id) - (a.createdAt || a.id));
+            migrateNotes();
         }
         function saveNotes() { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(notes)); } catch (e) { } }
         function getCurrentDateString() { return new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Asia/Shanghai' }); }
-        function parseShippingInfo(text) {
-            const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
-            if (lines.length < 4) return null;
-            return `平台: ${lines[0]}\n订单: ${lines[1]}\n买家: ${lines[lines.length - 2]}\n快递: ${lines[lines.length - 1]}`;
-        }
-        function extractField(note, field) {
-            if (!note.isAutoFormatted) return '';
-            const lines = note.content.split('\n');
-            for (let line of lines) if (line.startsWith(field + ':')) return line.substring(field.length + 1).trim();
-            return '';
-        }
         function addNote(content) {
             const trimmed = content.trim();
             if (!trimmed) return false;
@@ -876,12 +943,105 @@
             saveNotes();
             return true;
         }
-        function deleteNote(id) {
+        function deleteNoteById(id) {
             const idx = notes.findIndex(n => n.id === id);
-            if (idx === -1) return false;
+            if (idx === -1) return null;
+            const deleted = notes[idx];
             notes.splice(idx, 1);
             saveNotes();
+            return { note: deleted, index: idx };
+        }
+        function clearAllNotes() {
+            const snapshot = [...notes];
+            notes = [];
+            saveNotes();
+            return snapshot;
+        }
+        function restoreFromUndo(undoItem) {
+            if (undoItem.type === 'single') {
+                const { note, index } = undoItem;
+                if (index >= 0 && index <= notes.length) notes.splice(index, 0, note);
+                else notes.unshift(note);
+                notes.sort((a,b) => (b.createdAt || b.id) - (a.createdAt || a.id));
+                saveNotes();
+                showToast(`↩️ 已恢复「${note.content.substring(0, 30)}...」`, true);
+            } else if (undoItem.type === 'bulk') {
+                notes = undoItem.notesSnapshot;
+                saveNotes();
+                showToast(`↩️ 已恢复清空的全部记录`, true);
+            }
+            renderNotes();
+        }
+        function pushUndo(undoData) {
+            undoStack.push(undoData);
+            if (undoStack.length > 20) undoStack.shift();
+        }
+
+        // 带密码删除
+        function requestDeleteWithPassword(noteId, cardElement) {
+            const pwd = prompt('🔐 删除需要验证密码', '');
+            if (pwd !== '00000') {
+                showToast('❌ 密码错误，无法删除', false);
+                return false;
+            }
+            // 备份
+            const idx = notes.findIndex(n => n.id === noteId);
+            if (idx === -1) return false;
+            const deletedNote = { ...notes[idx] };
+            const deletedIndex = idx;
+            // 动画删除
+            if (cardElement) {
+                cardElement.style.opacity = '0';
+                cardElement.style.transform = 'translateX(20px)';
+                setTimeout(() => {
+                    const result = deleteNoteById(noteId);
+                    if (result) {
+                        pushUndo({ type: 'single', note: result.note, index: result.index });
+                        renderNotes();
+                        showToast('🗑️ 已删除 (可撤销)', true);
+                    }
+                }, 160);
+            } else {
+                const result = deleteNoteById(noteId);
+                if (result) {
+                    pushUndo({ type: 'single', note: result.note, index: result.index });
+                    renderNotes();
+                    showToast('🗑️ 已删除', true);
+                }
+            }
             return true;
+        }
+
+        // 清空全部带密码
+        function clearAllWithPassword() {
+            const pwd = prompt('⚠️ 清空所有发货记录需要验证密码', '');
+            if (pwd !== '00000') {
+                showToast('❌ 密码错误，清空操作取消', false);
+                return;
+            }
+            if (notes.length === 0) { showToast('暂无记录可清空', false); return; }
+            const snapshot = clearAllNotes();
+            pushUndo({ type: 'bulk', notesSnapshot: snapshot });
+            renderNotes();
+            showToast('🗑️ 已清空所有记录 (可撤销)', true);
+        }
+
+        // 撤销逻辑
+        function undoLastDelete() {
+            if (undoStack.length === 0) {
+                showToast('暂无可以撤销的删除操作', false);
+                return;
+            }
+            const last = undoStack.pop();
+            restoreFromUndo(last);
+        }
+
+        // 筛选、搜索、渲染等 (原样保留)
+        function extractField(note, field) {
+            if (!note.isAutoFormatted) return '';
+            const lines = note.content.split('\n');
+            for (let line of lines) if (line.startsWith(field + ':')) return line.substring(field.length + 1).trim();
+            return '';
         }
         function applyFilters(noteList) {
             const f = activeFilters;
@@ -910,6 +1070,7 @@
         function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
         function copyToClipboard(text) { navigator.clipboard?.writeText(text).then(() => showToast('📋 已复制', true)).catch(() => { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); showToast('📋 已复制', true); }); }
         function showToast(msg, success = false) { clearTimeout(toastTimer); toastEl.textContent = msg; toastEl.className = 'toast' + (success ? ' success' : ''); toastEl.classList.add('show'); toastTimer = setTimeout(() => toastEl.classList.remove('show'), 1800); }
+
         function renderNotes() {
             const displayNotes = getFilteredNotes();
             notesList.innerHTML = '';
@@ -938,36 +1099,36 @@
             bindCardEvents();
             updateFilterUI();
         }
+
         function bindCardEvents() {
             notesList.querySelectorAll('.btn-icon.edit').forEach(btn => btn.onclick = (e) => { e.stopPropagation(); const id = parseInt(btn.dataset.id); startEdit(id); });
             notesList.querySelectorAll('.btn-icon.copy').forEach(btn => btn.onclick = (e) => { e.stopPropagation(); const note = notes.find(n => n.id === parseInt(btn.dataset.id)); if (note) copyToClipboard(note.content); });
-            notesList.querySelectorAll('.btn-icon.delete').forEach(btn => btn.onclick = (e) => { e.stopPropagation(); const id = parseInt(btn.dataset.id); const card = btn.closest('.note-card'); if (card) { card.style.opacity = '0'; card.style.transform = 'translateX(20px)'; setTimeout(() => { if (deleteNote(id)) renderNotes(); }, 160); } else if (deleteNote(id)) renderNotes(); });
+            notesList.querySelectorAll('.btn-icon.delete').forEach(btn => btn.onclick = (e) => { e.stopPropagation(); const id = parseInt(btn.dataset.id); const card = btn.closest('.note-card'); requestDeleteWithPassword(id, card); });
         }
+
         function startEdit(id) {
             const note = notes.find(n => n.id === id);
             if (!note) return;
             const card = notesList.querySelector(`[data-id="${id}"]`);
             if (!card) return;
-            card.classList.add('editing');
             const body = card.querySelector('.note-body');
             body.innerHTML = `<div class="edit-area"><textarea class="edit-textarea">${escHtml(note.content)}</textarea><div class="edit-buttons"><button class="btn-edit-action save">保存</button><button class="btn-edit-action cancel">取消</button></div></div>`;
             const textarea = body.querySelector('.edit-textarea'); textarea.focus();
             const saveBtn = body.querySelector('.save'), cancelBtn = body.querySelector('.cancel');
             saveBtn.onclick = () => { const newContent = textarea.value; if (!newContent.trim()) { showToast('内容不能为空', false); return; } updateNote(id, newContent); renderNotes(); showToast('✅ 已保存', true); };
             cancelBtn.onclick = () => renderNotes();
-            textarea.addEventListener('keydown', (e) => { if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); saveBtn.click(); } });
         }
 
-        // 交互
         btnAdd.onclick = () => { const text = noteInput.value; if (text.trim()) { addNote(text.trim()); noteInput.value = ''; searchInput.value = ''; searchClear.classList.remove('visible'); renderNotes(); showToast('📦 已添加', true); } };
         noteInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); btnAdd.click(); } });
         searchInput.addEventListener('input', () => { searchClear.classList.toggle('visible', searchInput.value.length > 0); renderNotes(); });
         searchClear.onclick = () => { searchInput.value = ''; searchClear.classList.remove('visible'); renderNotes(); };
-        btnClearAll.onclick = () => { if (notes.length && confirm('⚠️ 清空全部发货记录？')) { notes = []; saveNotes(); renderNotes(); showToast('已清空', true); } };
+        btnClearAll.onclick = () => clearAllWithPassword();
         document.addEventListener('paste', (e) => { if (document.activeElement === noteInput || document.activeElement === searchInput) return; const text = e.clipboardData?.getData('text/plain'); if (text?.trim()) { e.preventDefault(); if (addNote(text.trim())) { searchInput.value = ''; renderNotes(); showToast('📦 智能识别并添加', true); } } });
         btnToggleFilter.onclick = () => { filterPanel.classList.toggle('show'); btnToggleFilter.classList.toggle('active', filterPanel.classList.contains('show')); };
         btnApplyFilter.onclick = () => { activeFilters = { dateFrom: filterDateFrom.value, dateTo: filterDateTo.value, buyer: filterBuyer.value.trim(), order: filterOrder.value.trim(), platform: filterPlatform.value.trim() }; renderNotes(); };
         btnClearFilter.onclick = () => { filterDateFrom.value = ''; filterDateTo.value = ''; filterBuyer.value = ''; filterOrder.value = ''; filterPlatform.value = ''; activeFilters = { dateFrom: '', dateTo: '', buyer: '', order: '', platform: '' }; renderNotes(); };
+        undoDeleteBtn.onclick = () => undoLastDelete();
 
         loadNotes();
         renderNotes();
